@@ -10,6 +10,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import com.bilocan.lingo.databinding.ActivityLingo5Binding
 import com.bilocan.lingo.utils.CustomToast
 import java.util.*
+import android.app.AlertDialog
 
 class Lingo5Activity : AppCompatActivity() {
     private lateinit var binding: ActivityLingo5Binding
@@ -64,6 +65,12 @@ class Lingo5Activity : AppCompatActivity() {
         viewModel.hintAvailable.observe(this) { available ->
             binding.hintButton.isEnabled = available
             binding.hintButton.alpha = if (available) 1f else 0.5f
+        }
+
+        viewModel.extraAttemptAvailable.observe(this) { available ->
+            if (available) {
+                showExtraAttemptDialog()
+            }
         }
 
         viewModel.toastMessage.observe(this) { message ->
@@ -143,5 +150,53 @@ class Lingo5Activity : AppCompatActivity() {
             imm.hideSoftInputFromWindow(view.windowToken, 0)
             view.clearFocus()
         }
+    }
+
+    private fun showExtraAttemptDialog() {
+        val dialog = AlertDialog.Builder(this, R.style.LingoAlertDialog)
+            .setCustomTitle(android.widget.TextView(this).apply {
+                text = "Ek Hak"
+                textSize = 20f
+                setTextColor(android.graphics.Color.parseColor("#9C27B0"))
+                gravity = android.view.Gravity.CENTER
+                setPadding(0, 30, 0, 30)
+            })
+            .setMessage("Üzgünüm, doğru cevabı bulamadınız.\n\n50 puan karşılığında bir hak daha ister misiniz?")
+            .setPositiveButton("Evet") { dialog, _ ->
+                if (viewModel.purchaseExtraAttempt(true)) {
+                    binding.guessInput.isEnabled = true
+                    binding.submitButton.isEnabled = true
+                    binding.nextWordButton.visibility = View.GONE
+                    binding.correctWordText.visibility = View.GONE
+                } else {
+                    binding.guessInput.isEnabled = false
+                    binding.submitButton.isEnabled = false
+                    binding.hintButton.isEnabled = false
+                    binding.correctWordText.text = "Doğru kelime: ${viewModel.getCurrentWord()}"
+                    binding.correctWordText.visibility = View.VISIBLE
+                    binding.nextWordButton.visibility = View.VISIBLE
+                    CustomToast.show(this, "Yeterli puanınız yok!")
+                }
+                dialog.dismiss()
+            }
+            .setNegativeButton("Hayır") { dialog, _ ->
+                viewModel.purchaseExtraAttempt(false)
+                binding.guessInput.isEnabled = false
+                binding.submitButton.isEnabled = false
+                binding.hintButton.isEnabled = false
+                binding.correctWordText.text = "Doğru kelime: ${viewModel.getCurrentWord()}"
+                binding.correctWordText.visibility = View.VISIBLE
+                binding.nextWordButton.visibility = View.VISIBLE
+                dialog.dismiss()
+            }
+            .setCancelable(false)
+            .create()
+
+        dialog.window?.setLayout(
+            android.view.WindowManager.LayoutParams.MATCH_PARENT,
+            android.view.WindowManager.LayoutParams.WRAP_CONTENT
+        )
+        
+        dialog.show()
     }
 } 

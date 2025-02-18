@@ -25,6 +25,10 @@ class LingoViewModel(
     private val _hintAvailable = MutableLiveData<Boolean>(true)
     val hintAvailable: LiveData<Boolean> = _hintAvailable
 
+    private val _extraAttemptAvailable = MutableLiveData<Boolean>()
+    val extraAttemptAvailable: LiveData<Boolean> = _extraAttemptAvailable
+
+    private var extraAttemptUsed = false
     private var currentAttempt = 0
     private val maxAttempts = 4 // 4 tahmin hakkı
 
@@ -40,10 +44,10 @@ class LingoViewModel(
             "KAPI", "MASA", "KUTU", "KEDİ", "KALE","KASE", "KAFA", "KÖŞE", "KOLA", "KULE","KURU", "KAYA", "KAZA", "KİRA", "KOZA",
             "KÜME", "KURA", "KOKU", "KUYU", "KORO","ACİL", "AÇIK", "AÇMA", "ADAM", "ADET","AĞAÇ", "AĞIR", "AİLE", "AKIL",
             "AKIM", "AKIN", "ALAN", "ALEM", "ANNE",  "ARDA", "ARMA", "ASKI", "ASMA", "ATEŞ", "ATKI", "AVCI", "AVLU", "AYAK",
-            "AYAR", "AYAZ",  "AYET", "AYIP", "AYNA", "AYRI", "AZAR", "AZİM", "BABA", "BACA",  "BALE", "BANT", "BANK", "BATI", "BAYİ",  "BELA",
+            "AYAR", "AYAZ",  "AYET", "AYIP", "AYNA", "FARE", "AZAR", "AZİM", "BABA", "BACA",  "BALE", "BANT", "BANK", "BATI", "BAYİ",  "BELA",
             "BESİ", "BLOK", "BORU", "BUĞU", "BURÇ", "BURS", "CAMİ", "CARİ", "CAİZ", "CENK", "ÇABA", "ÇAKI",
             "ÇALI",  "ÇENE", "ÇAPU", "ÇETE", "ÇENE", "ÇIRA","CÜCE",  "DANA", "DART", "DAYI", "DELİ", "DERİ", "DERT", "DESİ", "DEVA",
-            "DİNİ",  "CİPS", "DİRİ", "DİŞİ", "DİZE", "DİZİ", "DOĞA", "ECEL", "EDEP", "ELÇİ", "EKŞİ", "EMİR", "ENSE", "ERİL", "ESKİ", "ESİR", "FANİ", "PANO",
+            "ŞİŞE", "CİPS", "DİRİ", "DİŞİ", "DİZE", "DİZİ", "DOĞA", "ECEL", "EDEP", "ELÇİ", "EKŞİ", "EMİR", "ENSE", "ERİL", "ESKİ", "ESİR", "FANİ", "PANO",
             "HİLE", "TARZ",  "ALEM", "MALİ", "MAZİ", "AYIP", "AZIK", "UFUK", "ANNE", "BABA", "OĞUL", "DEDE", "IŞIK", "RIZA", "REST",
             "MAAŞ", "ARAF", "OKUL", "OYUN", "ALGI", "SAKİ", "DARA", "BADE", "DÖRT", "ALTI", "YEDİ", "ÇENE", "ÇALI", "ÇATI", "BAZI", "ASLA", "KARE", "KURA",
             "KART", "HANE", "TANE", "PANO", "SOLO", "KORO", "BALO", "ÇİLE", "BELA", "UZUN", "KISA", "USLU", "AKİL", "KATI", "ILIK", "SERT", "ADİL", "BAKİ","ASIK",
@@ -139,8 +143,10 @@ class LingoViewModel(
 
     private fun resetGameState() {
         currentAttempt = 0
+        extraAttemptUsed = false
         _gameState.value = GameState.PLAYING
         _hintAvailable.value = true
+        _extraAttemptAvailable.value = false
         if (unusedWords.isEmpty()) {
             unusedWords = allWords.toMutableList()
         }
@@ -228,7 +234,10 @@ class LingoViewModel(
     private fun updateGameState(guess: String, results: Array<LetterResult>) {
         val guessResult = GuessResult(guess, results.toList())
         val currentGuesses = _guesses.value?.toMutableList() ?: mutableListOf()
-        currentGuesses[currentAttempt + 1] = guessResult
+        
+        // Eğer ekstra hak kullanıldıysa, son satıra yaz
+        val targetIndex = if (extraAttemptUsed) currentGuesses.size - 1 else currentAttempt + 1
+        currentGuesses[targetIndex] = guessResult
         _guesses.value = currentGuesses
 
         currentAttempt++
@@ -236,6 +245,7 @@ class LingoViewModel(
         when {
             results.all { it == LetterResult.CORRECT } -> {
                 _gameState.value = GameState.WON
+                _extraAttemptAvailable.value = false
                 // Puan hesaplama: Temel puan + erken bulma bonusu
                 val basePoints = 50
                 val earlyGuessBonus = (maxAttempts - currentAttempt + 1) * 10
@@ -244,17 +254,24 @@ class LingoViewModel(
                 saveScore(newScore)
             }
             currentAttempt >= maxAttempts -> {
-                _gameState.value = GameState.LOST
-                // Kaybetme durumunda puan düşürme
-                val currentScore = getStoredScore()
-                val penaltyPoints = when (letterCount) {
-                    4 -> 20  // 4 harfli kelimeler için daha az ceza
-                    5 -> 25  // 5 harfli kelimeler için orta ceza
-                    6 -> 30  // 6 harfli kelimeler için daha fazla ceza
-                    else -> 20
+                if (!extraAttemptUsed && _extraAttemptAvailable.value != true) {
+                    _extraAttemptAvailable.value = true
+                    // Kelime bilinemediğinde puan düşürme
+                    val currentScore = getStoredScore()
+                    val penalty = when (letterCount) {
+                        4 -> 20
+                        5 -> 25
+                        6 -> 30
+                        else -> 20
+                    }
+                    val newScore = maxOf(0, currentScore - penalty) // Puanın eksi olmamasını sağla
+                    saveScore(newScore)
+                } else {
+                    _gameState.value = GameState.LOST
                 }
-                val newScore = currentScore - penaltyPoints
-                saveScore(newScore)
+            }
+            else -> {
+                _gameState.value = GameState.PLAYING
             }
         }
     }
@@ -283,18 +300,23 @@ class LingoViewModel(
         }
         
         val currentWord = _currentWord.value!!
-        val availableIndices = (1 until currentWord.length).toMutableList()
-        val revealedLetters = _guesses.value?.flatMap { guess ->
-            guess.results.mapIndexedNotNull { index, result ->
-                if (result == LetterResult.CORRECT) index else null
+        
+        // Tüm tahminlerdeki doğru ve yanlış pozisyondaki harfleri topla
+        val knownLetters = mutableSetOf<Char>()
+        _guesses.value?.forEach { guess ->
+            guess.results.forEachIndexed { index, result ->
+                if (result == LetterResult.CORRECT || result == LetterResult.WRONG_POSITION) {
+                    knownLetters.add(guess.word[index])
+                }
             }
-        } ?: emptyList()
+        }
         
-        availableIndices.removeAll(revealedLetters)
+        // Henüz bilinmeyen harfleri bul
+        val unknownLetters = currentWord.toList().filterNot { it in knownLetters }
         
-        if (availableIndices.isEmpty()) return null
+        if (unknownLetters.isEmpty()) return null
         
-        val randomIndex = availableIndices.random()
+        val randomLetter = unknownLetters.random()
         _hintAvailable.value = false
         
         // İpucu kullanımı için puan düşür
@@ -307,6 +329,34 @@ class LingoViewModel(
         val newScore = currentScore - hintPenalty
         saveScore(newScore)
         
-        return currentWord[randomIndex]
+        return randomLetter
+    }
+
+    fun purchaseExtraAttempt(accepted: Boolean = false): Boolean {
+        if (!accepted) {
+            _extraAttemptAvailable.value = false
+            _gameState.value = GameState.LOST
+            return false
+        }
+
+        val currentScore = getStoredScore()
+        if (currentScore >= 50) {
+            saveScore(currentScore - 50)
+            currentAttempt--
+            extraAttemptUsed = true
+            _gameState.value = GameState.PLAYING
+            _extraAttemptAvailable.value = false
+
+            // Yeni bir boş satır ekle
+            val currentGuesses = _guesses.value?.toMutableList() ?: mutableListOf()
+            val emptyWord = " ".repeat(letterCount)
+            val emptyResults = Array(letterCount) { LetterResult.WRONG }
+            currentGuesses.add(GuessResult(emptyWord, emptyResults.toList()))
+            _guesses.value = currentGuesses
+            return true
+        }
+        _extraAttemptAvailable.value = false
+        _gameState.value = GameState.LOST
+        return false
     }
 } 
