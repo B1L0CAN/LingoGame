@@ -66,6 +66,12 @@ class Lingo6Activity : AppCompatActivity() {
             binding.hintButton.alpha = if (available) 1f else 0.5f
         }
 
+        viewModel.toastMessage.observe(this) { message ->
+            message?.let {
+                CustomToast.show(this, it)
+            }
+        }
+
         viewModel.gameState.observe(this) { gameState ->
             when (gameState) {
                 GameState.WON -> {

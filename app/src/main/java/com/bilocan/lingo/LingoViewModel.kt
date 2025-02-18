@@ -30,6 +30,9 @@ class LingoViewModel(
 
     private val sharedPreferences = application.getSharedPreferences("LingoScores", Context.MODE_PRIVATE)
 
+    private val _toastMessage = MutableLiveData<String>()
+    val toastMessage: LiveData<String> = _toastMessage
+
     // Kelime listelerini daha organize bir şekilde tut
     private val wordLists = mapOf(
         4 to listOf(
@@ -250,7 +253,7 @@ class LingoViewModel(
                     6 -> 30  // 6 harfli kelimeler için daha fazla ceza
                     else -> 20
                 }
-                val newScore = (currentScore - penaltyPoints).coerceAtLeast(0)
+                val newScore = currentScore - penaltyPoints
                 saveScore(newScore)
             }
         }
@@ -264,6 +267,20 @@ class LingoViewModel(
 
     fun useHint(): Char? {
         if (_hintAvailable.value != true || _currentWord.value.isNullOrEmpty()) return null
+        
+        // İpucu için gerekli puan kontrolü
+        val currentScore = getStoredScore()
+        val requiredPoints = when (letterCount) {
+            4 -> 10
+            5 -> 15
+            6 -> 20
+            else -> 10
+        }
+        
+        if (currentScore < requiredPoints) {
+            _toastMessage.value = "İpucu için $requiredPoints puana ihtiyacınız var. Mevcut puanınız: $currentScore"
+            return null // Yeterli puan yoksa ipucu verilmez
+        }
         
         val currentWord = _currentWord.value!!
         val availableIndices = (1 until currentWord.length).toMutableList()
@@ -281,14 +298,13 @@ class LingoViewModel(
         _hintAvailable.value = false
         
         // İpucu kullanımı için puan düşür
-        val currentScore = getStoredScore()
         val hintPenalty = when (letterCount) {
             4 -> 10   // 4 harfli kelimeler için daha az ceza
-            5 -> 10   // 5 harfli kelimeler için orta ceza
-            6 -> 10  // 6 harfli kelimeler için daha fazla ceza
-            else -> 5
+            5 -> 15   // 5 harfli kelimeler için orta ceza
+            6 -> 20   // 6 harfli kelimeler için daha fazla ceza
+            else -> 10
         }
-        val newScore = (currentScore - hintPenalty).coerceAtLeast(0)
+        val newScore = currentScore - hintPenalty
         saveScore(newScore)
         
         return currentWord[randomIndex]
