@@ -249,15 +249,14 @@ class LingoViewModel(
                 // Puan hesaplama: Temel puan + erken bulma bonusu
                 val basePoints = 50
                 val earlyGuessBonus = (maxAttempts - currentAttempt + 1) * 10
-                val currentScore = getStoredScore()
+                val currentScore = _score.value ?: 0
                 val newScore = currentScore + basePoints + earlyGuessBonus
                 saveScore(newScore)
             }
             currentAttempt >= maxAttempts -> {
-                if (!extraAttemptUsed && _extraAttemptAvailable.value != true) {
-                    _extraAttemptAvailable.value = true
+                if (!extraAttemptUsed) {
                     // Kelime bilinemediğinde puan düşürme
-                    val currentScore = getStoredScore()
+                    val currentScore = _score.value ?: 0
                     val penalty = when (letterCount) {
                         4 -> 20
                         5 -> 25
@@ -266,8 +265,17 @@ class LingoViewModel(
                     }
                     val newScore = maxOf(0, currentScore - penalty) // Puanın eksi olmamasını sağla
                     saveScore(newScore)
+                    
+                    // Yeterli puan varsa ek hak teklif et
+                    if (newScore >= 50) {
+                        _extraAttemptAvailable.value = true
+                    } else {
+                        _gameState.value = GameState.LOST
+                        _extraAttemptAvailable.value = false
+                    }
                 } else {
                     _gameState.value = GameState.LOST
+                    _extraAttemptAvailable.value = false
                 }
             }
             else -> {
@@ -283,10 +291,14 @@ class LingoViewModel(
     }
 
     fun useHint(): Char? {
-        if (_hintAvailable.value != true || _currentWord.value.isNullOrEmpty()) return null
+        // Oyun bitmişse veya ipucu kullanılamıyorsa null dön
+        if (_hintAvailable.value != true || 
+            _currentWord.value.isNullOrEmpty() || 
+            _gameState.value == GameState.WON || 
+            _gameState.value == GameState.LOST) return null
         
         // İpucu için gerekli puan kontrolü
-        val currentScore = getStoredScore()
+        val currentScore = _score.value ?: 0
         val requiredPoints = when (letterCount) {
             4 -> 10
             5 -> 15
@@ -339,7 +351,7 @@ class LingoViewModel(
             return false
         }
 
-        val currentScore = getStoredScore()
+        val currentScore = _score.value ?: 0
         if (currentScore >= 50) {
             saveScore(currentScore - 50)
             currentAttempt--
